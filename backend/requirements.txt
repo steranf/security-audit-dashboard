@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+paramiko
+pydantic
+python-multipart
+aiofiles
+python-dotenv
+sqlmodel
