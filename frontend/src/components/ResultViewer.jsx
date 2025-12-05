@@ -1,13 +1,82 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle, Info, Activity, HardDrive, Cpu, Globe, Download, FileText, Code } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Info, Activity, HardDrive, Cpu, Globe, Download, FileText, Code, Server } from 'lucide-react';
 
 const ResultViewer = ({ results, mode }) => {
     if (!results) return null;
 
+    const escapeHtml = (unsafe) => {
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    };
+
+    const escapeCsv = (field) => {
+        const stringField = String(field);
+        // Prevent Excel Formula Injection
+        if (['=', '+', '-', '@'].includes(stringField.charAt(0))) {
+            return `"'${stringField.replace(/"/g, '""')}"`;
+        }
+        // Standard CSV escaping: wrap in quotes and escape internal quotes
+        return `"${stringField.replace(/"/g, '""')}"`;
+    };
+
     const handleExport = (format) => {
-        console.log(`Exporting as ${format}...`);
-        // Implement actual export logic here (e.g., generate Blob and download)
-        alert(`Export to ${format} feature coming soon!`);
+        let content = '';
+        let type = '';
+        let extension = '';
+
+        if (format === 'json') {
+            content = JSON.stringify(results, null, 2);
+            type = 'application/json';
+            extension = 'json';
+        } else if (format === 'csv') {
+            // Secure CSV generation
+            const header = 'Section,Key,Value\n';
+            const summaryRows = Object.entries(results.summary).map(([k, v]) => `Summary,${escapeCsv(k)},${escapeCsv(v)}`).join('\n');
+            const metricRows = Object.entries(results.metrics).map(([k, v]) => `Metrics,${escapeCsv(k)},${escapeCsv(v)}`).join('\n');
+            const findingRows = results.findings ? results.findings.map(f => `Finding,${escapeCsv(f.severity)},${escapeCsv(f.description)}`).join('\n') : '';
+            const serviceRows = results.services ? results.services.map(s => `Service,${escapeCsv(s.name)},${escapeCsv(s.status + ' | ' + s.version)}`).join('\n') : '';
+            const ipRows = results.ips ? results.ips.map(i => `SuspiciousIP,${escapeCsv(i.ip)},${escapeCsv(i.reason + ' | ' + i.country)}`).join('\n') : '';
+
+            content = header + summaryRows + '\n' + metricRows + '\n' + findingRows + '\n' + serviceRows + '\n' + ipRows;
+            type = 'text/csv';
+            extension = 'csv';
+        } else if (format === 'html') {
+            // Secure HTML export with sanitization
+            content = `
+                <html>
+                <head><title>Audit Report - ${escapeHtml(results.server)}</title></head>
+                <body>
+                    <h1>Security Audit Report</h1>
+                    <p>Target: ${escapeHtml(results.server)}</p>
+                    <p>Date: ${escapeHtml(results.timestamp)}</p>
+                    <h2>Summary</h2>
+                    <ul>
+                        <li>Critical: ${escapeHtml(results.summary.critical)}</li>
+                        <li>Warning: ${escapeHtml(results.summary.warning)}</li>
+                        <li>Info: ${escapeHtml(results.summary.info)}</li>
+                    </ul>
+                </body>
+                </html>
+             `;
+            type = 'text/html';
+            extension = 'html';
+        }
+
+        if (content) {
+            const blob = new Blob([content], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `audit-report-${results.id}.${extension}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
     };
 
     if (mode === 'json') {
@@ -136,16 +205,22 @@ const ResultViewer = ({ results, mode }) => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {results.services.map((svc, idx) => (
+                                {results.services.map((service, idx) => (
                                     <tr key={idx}>
-                                        <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{svc.name}</td>
-                                        <td className="px-3 py-2 whitespace-nowrap text-sm">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${svc.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            {service.name}
+                                        </td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${service.status === 'active' || service.status === 'running'
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : 'bg-red-100 text-red-800'
                                                 }`}>
-                                                {svc.status}
+                                                {service.status}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{svc.version}</td>
+                                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                                            {service.version}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -162,7 +237,12 @@ const ResultViewer = ({ results, mode }) => {
                         <FileText className="w-5 h-5 mr-2 text-brand-blue" /> Recent Logs
                     </h3>
                     <div className="bg-gray-900 text-gray-300 p-3 rounded text-xs font-mono h-48 overflow-y-auto">
-                        {results.logs.map((log, idx) => (
+                        {results.logs.length > 100 && (
+                            <div className="text-gray-500 italic mb-2 sticky top-0 bg-gray-900 pb-1 border-b border-gray-800">
+                                Showing last 100 of {results.logs.length} logs...
+                            </div>
+                        )}
+                        {results.logs.slice(-100).map((log, idx) => (
                             <div key={idx} className="mb-1 border-b border-gray-800 pb-1 last:border-0">
                                 {log}
                             </div>
@@ -190,7 +270,7 @@ const ResultViewer = ({ results, mode }) => {
                     </ul>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

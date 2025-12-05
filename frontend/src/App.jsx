@@ -1,33 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import Header from './components/Header';
-import Footer from './components/Footer';
+import Layout from './components/Layout';
 import Audits from './components/Audits';
 import ResultViewer from './components/ResultViewer';
+import Notification from './components/Notification';
 import { runAudit } from './api';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { loadResults, saveResults } from './utils/storage';
+import { AlertCircle } from 'lucide-react';
 
 function App() {
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [notification, setNotification] = useState(null); // { type: 'success' | 'error', message: string }
+    const [notification, setNotification] = useState(null); // { type: 'success' | 'error' | 'warning' | 'info', message: string }
 
     // Load last audit from local storage on mount
     useEffect(() => {
-        const savedResults = localStorage.getItem('lastAuditResults');
-        if (savedResults) {
-            try {
-                setResults(JSON.parse(savedResults));
-            } catch (e) {
-                console.error('Failed to parse saved results', e);
-            }
+        const saved = loadResults();
+        if (saved) {
+            setResults(saved);
         }
     }, []);
 
-    const showNotification = (type, message) => {
-        setNotification({ type, message });
-        setTimeout(() => setNotification(null), 5000); // Hide after 5s
-    };
+    const closeNotification = () => setNotification(null);
 
     const handleRunAudit = async (config) => {
         setLoading(true);
@@ -37,62 +31,69 @@ function App() {
         try {
             const data = await runAudit(config);
             setResults(data);
-            localStorage.setItem('lastAuditResults', JSON.stringify(data));
-            showNotification('success', 'Audit completed successfully!');
+            saveResults(data);
+            setNotification({ type: 'success', message: 'Audit completed successfully!' });
         } catch (err) {
             console.error(err);
-            setError(err.message);
-            showNotification('error', `Audit failed: ${err.message}`);
+            setError(err?.message || "Unexpected error occurred");
+            setNotification({ type: 'error', message: `Audit failed: ${err?.message || "Unknown error"}` });
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="flex flex-col min-h-screen bg-gray-50 font-sans text-gray-900">
-            <Header />
+        <Layout>
+            {/* Notification Toast */}
+            {notification && (
+                <Notification
+                    type={notification.type}
+                    message={notification.message}
+                    onClose={closeNotification}
+                    duration={5000}
+                />
+            )}
 
-            <main className="flex-grow container mx-auto px-4 py-8">
-                {/* Notification Toast */}
-                {notification && (
-                    <div className={`fixed top-20 right-4 z-50 px-6 py-4 rounded shadow-lg flex items-center transition-all duration-500 ${notification.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
-                        }`}>
-                        {notification.type === 'success' ? (
-                            <CheckCircle className="w-6 h-6 mr-3" />
-                        ) : (
-                            <AlertCircle className="w-6 h-6 mr-3" />
-                        )}
-                        <div>
-                            <h4 className="font-bold">{notification.type === 'success' ? 'Success' : 'Error'}</h4>
-                            <p className="text-sm">{notification.message}</p>
+            {/* Global Loading Indicator */}
+            {loading && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 animate-pulse">
+                    <div className="flex">
+                        <div className="flex-shrink-0">
+                            <div className="h-5 w-5 rounded-full border-2 border-blue-400 border-t-transparent animate-spin"></div>
+                        </div>
+                        <div className="ml-3">
+                            <p className="text-sm text-blue-700">
+                                Audit in progress... Please wait while we scan the target server.
+                            </p>
                         </div>
                     </div>
-                )}
+                </div>
+            )}
 
-                <Audits onRunAudit={handleRunAudit} isRunning={loading} />
+            <Audits onRunAudit={handleRunAudit} isRunning={loading} />
 
-                {error && (
-                    <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-8">
-                        <div className="flex">
-                            <div className="flex-shrink-0">
-                                <AlertCircle className="h-5 w-5 text-red-400" />
-                            </div>
-                            <div className="ml-3">
-                                <p className="text-sm text-red-700">
-                                    {error}
-                                </p>
-                            </div>
+            {error && (
+                <div role="alert" className="bg-red-50 border-l-4 border-red-500 p-4 mb-8">
+                    <div className="flex">
+                        <div className="flex-shrink-0">
+                            <AlertCircle className="h-5 w-5 text-red-400" />
+                        </div>
+                        <div className="ml-3">
+                            <p className="text-sm text-red-700">
+                                {error}
+                            </p>
                         </div>
                     </div>
-                )}
+                </div>
+            )}
 
-                {results && (
-                    <ResultViewer results={results} mode={results.mode || 'text'} />
-                )}
-            </main>
-
-            <Footer />
-        </div>
+            {results && (
+                <ResultViewer
+                    results={results}
+                    mode={['text', 'json', 'html', 'csv'].includes(results.mode) ? results.mode : 'text'}
+                />
+            )}
+        </Layout>
     );
 }
 
