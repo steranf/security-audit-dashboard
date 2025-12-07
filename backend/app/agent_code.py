@@ -381,6 +381,197 @@ def get_findings():
              findings.append({"severity": "Info", "description": f"RAM usage is healthy ({used_percent:.1f}%)", "recommendation": "Monitor memory"})
     except: pass
     
+    # --- 4. SYSTEM HARDENING & INTEGRITY ---
+
+    # Check 11: Kernel Hardening (Sysctl)
+    try:
+        sysctl_conf = {
+            'net.ipv4.conf.all.accept_redirects': {'expected': '0', 'desc': 'ICMP Redirects'},
+            'net.ipv4.tcp_syncookies': {'expected': '1', 'desc': 'SYN Flood Protection'},
+            'net.ipv4.ip_forward': {'expected': '0', 'desc': 'IP Forwarding'}
+        }
+        for key, config in sysctl_conf.items():
+            val = run_cmd(f"sysctl -n {key}")
+            if val != config['expected']:
+                findings.append({
+                    "severity": "Warning", 
+                    "description": f"Kernel parameter '{config['desc']}' is weak ({key}={val})",
+                    "recommendation": f"Set '{key} = {config['expected']}' in /etc/sysctl.conf"
+                })
+            else:
+                 findings.append({
+                    "severity": "Info", 
+                    "description": f"Kernel Hardening: {config['desc']} is configured correctly",
+                    "recommendation": "Maintain kernel security"
+                })
+    except: pass
+
+    # Check 12: Critical File Integrity
+    try:
+        shadow_perms = run_cmd("stat -c '%a %U' /etc/shadow") # e.g., 600 root
+        perms = shadow_perms.split()[0]
+        owner = shadow_perms.split()[1] if len(shadow_perms.split()) > 1 else 'root'
+        
+        if int(perms) > 600 or owner != 'root':
+             findings.append({
+                "severity": "Critical", 
+                "description": f"Unsafe permissions on /etc/shadow ({perms} {owner}). Hashes exposed.",
+                "recommendation": "Run: chown root:root /etc/shadow && chmod 600 /etc/shadow"
+            })
+        else:
+             findings.append({
+                "severity": "Info", 
+                "description": "/etc/shadow permissions are secure (600/000)",
+                "recommendation": "Regularly audit file permissions"
+            })
+    except: pass
+
+    # Check 13: Time Synchronization
+    try:
+        ntp_status = run_cmd("timedatectl status | grep 'NTP service'") # active / inactive
+        if "active" in ntp_status:
+             findings.append({
+                "severity": "Info", 
+                "description": "NTP Time Synchronization is active",
+                "recommendation": "Ensure time servers are trusted"
+            })
+        else:
+             findings.append({
+                "severity": "High", 
+                "description": "NTP Time Synchronization is NOT active. Logs may be invalid.",
+                "recommendation": "Enable chronyd, ntpd, or systemd-timesyncd"
+            })
+    except: pass
+
+    #Check 14: Info Leakage & Updates
+    try:
+        # Reboot Required?
+        if os.path.exists("/var/run/reboot-required"):
+             findings.append({
+                "severity": "Warning", 
+                "description": "System requires a reboot (Kernel updates pending)",
+                "recommendation": "Reboot system to apply security patches"
+            })
+        
+        # PHP Exposure
+        if os.path.exists("/usr/bin/php"):
+            expose = run_cmd("php -i | grep 'expose_php'")
+            if "On" in expose:
+                 findings.append({
+                    "severity": "Info", # Info because it's common, but good to fix
+                    "description": "PHP is exposing its version (expose_php = On)",
+                    "recommendation": "Set 'expose_php = Off' in php.ini to hide version info"
+                })
+    except: pass
+
+    # --- 5. ADVANCED THREAT DETECTION ---
+
+    # Check 15: SSH Authorized Keys Audit
+    try:
+        # Find authorized_keys files
+        keys_files = run_cmd("find /home /root -name authorized_keys -maxdepth 3 2>/dev/null").split('\n')
+        weak_keys_found = []
+        unsafe_perms = []
+        
+        for kf in keys_files:
+            if not kf: continue
+            # Check perms
+            perms = run_cmd(f"stat -c '%a' {kf}")
+            if perms and int(perms) > 600:
+                unsafe_perms.append(f"{kf} ({perms})")
+            
+            # Check content for weak keys (simple heuristic for short RSA)
+            # Real audit would need key parsing, but we check for old 1024 bit signatures if possible or just existence
+            # For now, let's just check if file exists and is not empty.
+            pass 
+
+        if unsafe_perms:
+            findings.append({
+                "severity": "High", 
+                "description": f"Insecure permissions on authorized_keys: {', '.join(unsafe_perms)}",
+                "recommendation": "chmod 600 on these files immediately"
+            })
+        else:
+             findings.append({
+                "severity": "Info", 
+                "description": "SSH authorized_keys permissions are secure",
+                "recommendation": "Regularly rotate SSH keys"
+            })
+    except: pass
+
+    # Check 16: Sudoers NOPASSWD
+    try:
+        nopasswd = run_cmd("grep -r 'NOPASSWD' /etc/sudoers /etc/sudoers.d/ 2>/dev/null")
+        if nopasswd:
+            findings.append({
+                "severity": "High", 
+                "description": f"Sudoers with NOPASSWD detected: {nopasswd.strip()[:100]}...",
+                "recommendation": "Verify if these users really need root without password"
+            })
+        else:
+             findings.append({
+                "severity": "Info", 
+                "description": "No 'NOPASSWD' directives found in sudoers",
+                "recommendation": "Maintain strict sudo controls"
+            })
+    except: pass
+
+    # Check 17: Suspicious Cron Jobs
+    try:
+        # Look for suspicious directories in cron files
+        cron_suspicious = run_cmd("grep -rE '/tmp/|/var/tmp/|/dev/shm/' /var/spool/cron /etc/cron* 2>/dev/null")
+        if cron_suspicious:
+            findings.append({
+                "severity": "Critical", 
+                "description": f"Suspicious Cron Job detected (running from temp dir): {cron_suspicious.strip()}",
+                "recommendation": "Investigate immediately! Possible malware persistence."
+            })
+        else:
+             findings.append({
+                "severity": "Info", 
+                "description": "No suspicious cron jobs detected running from /tmp or /dev/shm",
+                "recommendation": "Monitor crontab changes"
+            })
+    except: pass
+
+    # Check 18: Postfix Open Relay
+    try:
+        if "25" in services_running or "587" in services_running:
+            inet = run_cmd("postconf -h inet_interfaces 2>/dev/null")
+            nets = run_cmd("postconf -h mynetworks 2>/dev/null")
+            if inet == "all" and (not nets or nets == "0.0.0.0/0"):
+                 findings.append({
+                    "severity": "Critical", 
+                    "description": "Postfix configured as Open Relay (inet=all, networks=open)",
+                    "recommendation": "Restrict 'mynetworks' in main.cf immediately"
+                })
+    except: pass
+
+    # Check 19: Web Security Headers
+    try:
+        if "80" in services_running or "443" in services_running:
+             # Basic curl check
+             headers = run_cmd("curl -I -s http://localhost --connect-timeout 2")
+             missing_headers = []
+             if "X-Frame-Options" not in headers: missing_headers.append("X-Frame-Options")
+             if "X-Content-Type-Options" not in headers: missing_headers.append("X-Content-Type-Options")
+             
+             if missing_headers:
+                 findings.append({
+                    "severity": "Warning", 
+                    "description": f"Missing Web Security Headers: {', '.join(missing_headers)}",
+                    "recommendation": "Configure web server to send these headers"
+                })
+             
+             if "Server:" in headers:
+                  server_header = [l for l in headers.split('\n') if "Server:" in l][0].strip()
+                  findings.append({
+                    "severity": "Info", # Just Info, but worth noting
+                    "description": f"Web Server exposes version: {server_header}",
+                    "recommendation": "Configure 'ServerTokens Prod' (Apache) or 'server_tokens off' (Nginx)"
+                })
+    except: pass
+    
     return findings
 
 def get_logs():

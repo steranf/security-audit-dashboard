@@ -10,9 +10,17 @@ A professional, lightweight dashboard to audit Linux servers via SSH without ins
 
 *   **🕵️ Deep Security Inspection (Sherlock Mode)**: 
     *   **Fail2Ban Intelligence**: Audits usage of jails vs real services (e.g., warns if MySQL is exposed but unprotected).
-    *   **Protocol Hardening**: Detects obsolete SSHv1, verifies **FTP TLS Enforcement** (Process & Config check), and warns on insecure defaults.
+    *   **Protocol Hardening**: Detects obsolete SSHv1, verifies **FTP TLS Enforcement** (Process & Config check).
     *   **Kernel Defense**: Checks for **Mandatory Access Control** (SELinux/AppArmor) status.
-    *   **Core Checks**: Root Login, Empty Passwords, UID 0, Dangerous Ports (3306, 5432, 23).
+*   **🛡️ System Hardening & Integrity**:
+    *   **Kernel Hardening**: Audits `sysctl` params (SYN Flood, ICMP Redirects, IP Forwarding).
+    *   **Critical Perms**: Verifies `/etc/shadow` integrity and SSH `authorized_keys` permissions.
+    *   **Time Sync**: Checks NTP service status (Chronyd/NTPd) for log validity.
+*   **👁️ Advanced Threat Detection (Paranoid Mode)**:
+    *   **Sudoers Watchdog**: Detects dangerous `NOPASSWD` directives for any user.
+    *   **Cron Hunter**: Scans for suspicious tasks running from `/tmp` or `/dev/shm` (Malware indicators).
+    *   **Anti-Spam**: Checks if Postfix is configured as an **Open Relay** (`inet_interfaces=all` with open networks).
+    *   **Web Hygiene**: Audits Security Headers (`X-Frame-Options`, `X-Content-Type`) and Server banner leakage.
 *   **🧠 Smart Authentication**: 
     *   Supports SSH Keys (Encrypted & Plain), Password Auth, and Custom Ports.
     *   **Sudo Handling**: Prompts for sudo password *only* when the server requires it.
