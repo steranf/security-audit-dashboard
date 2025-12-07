@@ -36,16 +36,20 @@ def _run_ssh_audit(audit_id: str, timestamp: str, request: AuditRequest) -> Audi
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     pkey = None
+    key_skipped = False
     if os.path.exists(SSH_KEY_PATH):
         try:
             pkey = paramiko.RSAKey.from_private_key_file(SSH_KEY_PATH, password=request.passphrase)
         except paramiko.ssh_exception.PasswordRequiredException:
-            raise Exception("PassphraseRequired")
+            # Key is encrypted. Don't block yet. Try other auth methods or fail later.
+            pkey = None
+            key_skipped = True
         except: 
             try:
                 pkey = paramiko.Ed25519Key.from_private_key_file(SSH_KEY_PATH, password=request.passphrase)
             except paramiko.ssh_exception.PasswordRequiredException:
-                raise Exception("PassphraseRequired")
+                pkey = None
+                key_skipped = True
             except: 
                 pkey = None
 
@@ -87,6 +91,18 @@ def _run_ssh_audit(audit_id: str, timestamp: str, request: AuditRequest) -> Audi
         return final_result
 
     except Exception as e:
+        # Check if this is an Auth failure and we skipped a locked key
+        if "Authentication failed" in str(e) or isinstance(e, paramiko.AuthenticationException):
+            if key_skipped and not request.passphrase:
+                # NOW we know we needed that key
+                # Raise specific error that api.py catches
+                # We return a dummy result that api.py logic detects via 'status=failed' and findings description
+                return AuditResult(
+                    id=audit_id, status="failed", server=request.server, timestamp=timestamp,
+                    summary=AuditSummary(critical=0,warning=0,info=0), metrics=AuditMetrics(cpu="N/A",ram="N/A",disk="N/A",connections=0),
+                    services=[], findings=[Finding(severity="Error", description="PassphraseRequired")], logs=[], ips=[]
+                )
+
         return AuditResult(
             id=audit_id, status="failed", server=request.server, timestamp=timestamp,
             summary=AuditSummary(critical=0,warning=0,info=0), metrics=AuditMetrics(cpu="N/A",ram="N/A",disk="N/A",connections=0),

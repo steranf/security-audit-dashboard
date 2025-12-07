@@ -46,28 +46,7 @@ const ResultViewer = ({ results, mode }) => {
         window.open(exportUrl, '_blank');
     };
 
-    if (mode === 'json') {
-        return (
-            <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-gray-800 flex items-center">
-                        <Code className="w-5 h-5 mr-2 text-brand-blue" />
-                        Raw JSON Output
-                    </h3>
-                    <button
-                        onClick={() => handleExport('json')}
-                        className="flex items-center px-4 py-2 text-sm font-medium text-brand-blue border border-brand-blue rounded-md hover:bg-blue-50"
-                    >
-                        <Download className="w-4 h-4 mr-2" />
-                        Download JSON
-                    </button>
-                </div>
-                <pre className="bg-gray-900 text-green-400 p-4 rounded-md overflow-x-auto text-sm font-mono">
-                    {JSON.stringify(results, null, 2)}
-                </pre>
-            </div>
-        );
-    }
+
 
     return (
         <div className="space-y-6">
@@ -80,6 +59,9 @@ const ResultViewer = ({ results, mode }) => {
                 <div className="flex space-x-3 mt-4 md:mt-0">
                     <button onClick={() => handleExport('csv')} className="flex items-center px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200">
                         <FileText className="w-4 h-4 mr-2" /> CSV
+                    </button>
+                    <button onClick={() => handleExport('json')} className="flex items-center px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200">
+                        <Code className="w-4 h-4 mr-2" /> JSON
                     </button>
                     <button onClick={() => handleExport('html')} className="flex items-center px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded hover:bg-gray-200">
                         <Globe className="w-4 h-4 mr-2" /> HTML

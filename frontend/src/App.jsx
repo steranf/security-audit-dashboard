@@ -45,14 +45,14 @@ function App() {
                 throw new Error(errorMsg);
             }
 
-            setResults(data);
+            setResults({ ...data, mode: config.mode });
             saveResults(data);
             setNotification({ type: 'success', message: 'Audit completed successfully!' });
         } catch (err) {
             console.error(err);
 
-            // If it's a specific PassphraseRequired error, re-throw it so Audits.jsx can handle it
-            if (err.code === 'PASSPHRASE_REQUIRED') {
+            // If it's a specific authentication error, re-throw it so Audits.jsx can handle it
+            if (err.code === 'PASSPHRASE_REQUIRED' || err.code === 'SUDO_PASSWORD_REQUIRED') {
                 throw err;
             }
 

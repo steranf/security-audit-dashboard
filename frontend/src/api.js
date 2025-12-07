@@ -83,6 +83,11 @@ export const runAudit = async (config) => {
                 err.code = 'PASSPHRASE_REQUIRED';
                 throw err;
             }
+            if (response.status === 401 && errorData.code === 'SUDO_PASSWORD_REQUIRED') {
+                const err = new Error(errorData.message);
+                err.code = 'SUDO_PASSWORD_REQUIRED';
+                throw err;
+            }
 
             let errorMessage = `Audit failed: ${response.statusText}`;
             if (errorData.detail) errorMessage = errorData.detail;

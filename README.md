@@ -1,128 +1,78 @@
-Security Audit Dashboard
+# 🛡️ Security Audit Dashboard
 
+**Agentless Linux Server Security Auditor**
 
+A professional, lightweight dashboard to audit Linux servers via SSH without installing agents. Generates detailed HTML/JSON reports on services, security findings, and server metrics.
 
-Este proyecto contiene el frontend de un panel de auditoría de seguridad. Está desarrollado con React + Vite + TailwindCSS.
+![Dashboard Preview](frontend/src/assets/preview_placeholder.png)
 
+## ✨ Key Features
 
+*   **🕵️ Agentless Auditing**: Connects via SSH (Paramiko), runs a temporary Python script, and disconnects. Zero footprint left on the target server.
+*   **🧠 Smart Authentication**: 
+    *   Supports SSH Keys (Encrypted & Plain), Password Auth, and Custom Ports.
+    *   **Intelligent Fallback**: Can detect locked keys and skip them if a password is provided.
+    *   **Sudo Handling**: Prompts for sudo password *only* when the server requires it.
+*   **📊 Rich Reporting**:
+    *   **Interactive UI**: Built with React + TailwindCSS + Lucide Icons.
+    *   **Export Options**: Download professional **HTML Reports**, CSV summaries, or Raw JSON data.
+*   **🚀 Modern Stack**:
+    *   **Backend**: FastAPI (Python), Async SSH, SQLite.
+    *   **Frontend**: Vite (React), TailwindCSS.
 
-🚀 Cómo empezar
+---
 
+## 🚀 Quick Start
 
+### Prerequisites
+*   Python 3.8+
+*   Node.js 16+
+*   SSH Key (Optional but recommended)
 
-Clonar el repositorio
+### 1. Backend Setup
 
+```bash
+cd backend
+python -m venv venv
+# Windows
+venv\Scripts\activate
+# Linux/Mac
+source venv/bin/activate
 
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 3000
+```
 
-git clone https://github.com/steranf/security-audit-dashboard.git
+### 2. Frontend Setup
 
-cd security-audit-dashboard/frontend
-
-
-
-Instalar dependencias
-
-
-
+```bash
+cd frontend
 npm install
-
-
-
-Ejecutar en modo desarrollo
-
-
-
 npm run dev
+```
 
+Open your browser at `http://localhost:5173`.
 
+---
 
-El servidor de desarrollo se abrirá en http://localhost:5173 (por defecto).
+## 🛠️ Usage
 
+1.  **Enter Connection Details**: Server IP, User, Port (Default 22).
+2.  **Authentication**:
+    *   If using an **SSH Key**, ensure it's in the default path (or set `SSH_KEY_PATH` env var).
+    *   If the key has a passphrase, the UI will prompt you.
+    *   If relying on **Password**, just enter it in the secured field.
+3.  **Run Audit**: Click "Start Audit".
+4.  **View & Export**: check the results card and click **PDF / HTML** buttons to export.
 
+---
 
-📂 Estructura del proyecto
+## 🔒 Security Note
 
+*   This tool runs `sudo` commands to fetch system stats (netstat, systemctl, logs).
+*   Credentials are sent over encrypted HTTPs (if configured) or localhost, and are **never stored** permanently.
+*   The agent script runs in RAM and is deleted immediately after execution.
 
+## 📄 License
 
-src/ → Código fuente principal
-
-
-
-App.jsx → Componente raíz
-
-
-
-components/ → Componentes reutilizables (Header, Footer, Audits, ResultViewer)
-
-
-
-api.js → Lógica para llamadas a la API
-
-
-
-index.css → Estilos globales
-
-
-
-main.jsx → Punto de entrada
-
-
-
-package.json → Configuración de dependencias y scripts
-
-
-
-vite.config.js → Configuración de Vite
-
-
-
-tailwind.config.js → Configuración de TailwindCSS
-
-
-
-⚙️ Recomendaciones
-
-
-
-No subir node\_modules/: ya está ignorado en .gitignore.
-
-
-
-Variables sensibles: usa un archivo .env para credenciales o configuraciones privadas.
-
-
-
-Commits claros: describe brevemente los cambios realizados.
-
-
-
-👥 Colaboración
-
-
-
-Para traer los últimos cambios:
-
-
-
-git pull origin main
-
-
-
-Para subir tus cambios:
-
-
-
-git add .
-
-git commit -m "Descripción de los cambios"
-
-git push origin main
-
-
-
-📌 Notas
-
-
-
-Este proyecto está en fase inicial. Se aceptan sugerencias y mejoras para optimizar el flujo de trabajo y la seguridad del dashboard.
-
+MIT License.

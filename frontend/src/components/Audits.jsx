@@ -5,7 +5,6 @@ const INITIAL_CONFIG = {
   server: '',
   user: '',
   port: '22',
-  mode: 'text',
   passphrase: '',
   password: '',
   options: {
@@ -141,22 +140,7 @@ const Audits = ({ onRunAudit, onClear, isRunning }) => {
             />
           </div>
 
-          {/* Output Mode */}
-          <div>
-            <label htmlFor="mode" className="block text-sm font-medium text-gray-700 mb-1">Output Mode</label>
-            <select
-              id="mode"
-              name="mode"
-              value={config.mode}
-              onChange={handleChange}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-blue focus:ring-brand-blue sm:text-sm p-2 border"
-            >
-              <option value="text">Text Report</option>
-              <option value="json">JSON Data</option>
-              <option value="html">HTML Page</option>
-              <option value="csv">CSV Export</option>
-            </select>
-          </div>
+
         </div>
 
         {/* Authentication Section */}
@@ -223,6 +207,7 @@ const Audits = ({ onRunAudit, onClear, isRunning }) => {
                     placeholder="Enter password if not using keys..."
                     value={config.password}
                     onChange={handleChange}
+                    autoFocus
                   />
                 </div>
               </div>
