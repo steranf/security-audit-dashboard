@@ -1,5 +1,6 @@
 // Environment variables for configuration
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'; // Default to true if not specified
+// Note: In Vite, env vars must start with VITE_
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
 /**
@@ -20,7 +21,7 @@ const validateConfig = (config) => {
 
 /**
  * Runs the security audit.
- * @param {Object} config - Audit configuration (server, user, port, etc.)
+ * @param {Object} config - Audit configuration (server, user, port, fast, silent, etc.)
  * @returns {Promise<Object>} Audit results.
  */
 export const runAudit = async (config) => {
@@ -30,36 +31,62 @@ export const runAudit = async (config) => {
         throw new Error(validationError);
     }
 
-    // 2. Mock Mode
+    // 2. Prepare Request Payload
+    const payload = {
+        server: config.server,
+        user: config.user,
+        port: parseInt(config.port, 10),
+        mode: config.mode || 'json',
+        lines: parseInt(config.lines, 10) || 100,
+        services: config.services || '',
+        passphrase: config.passphrase || null,
+        password: config.password || null,
+        options: {
+            fast: !!config.fast,
+            silent: !!config.silent
+        }
+    };
+
+    // 3. Mock Mode
     if (USE_MOCK) {
-        console.log("Running in MOCK mode...");
-        return mockAudit(config);
+        console.log("Running in MOCK mode (Client-side)...");
+        return mockAudit(payload);
     }
 
-    // 3. Real API Call
+    // 4. Real API Call
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
     try {
+        console.log(`Sending audit request to ${API_BASE_URL}/audit`, payload);
+
         const response = await fetch(`${API_BASE_URL}/audit`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                // 'Authorization': `Bearer ${token}` // Future-proof: Add token here
             },
-            body: JSON.stringify(config),
+            body: JSON.stringify(payload),
             signal: controller.signal,
         });
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            // Try to parse error message from backend
-            let errorMessage = `Audit failed: ${response.statusText}`;
+            let errorData = {};
             try {
-                const errorData = await response.json();
-                if (errorData.message) errorMessage = errorData.message;
+                errorData = await response.json();
             } catch (e) { /* ignore JSON parse error */ }
+
+            // Handle specific PassphraseRequired error
+            if (response.status === 401 && errorData.code === 'PASSPHRASE_REQUIRED') {
+                const err = new Error(errorData.message);
+                err.code = 'PASSPHRASE_REQUIRED';
+                throw err;
+            }
+
+            let errorMessage = `Audit failed: ${response.statusText}`;
+            if (errorData.detail) errorMessage = errorData.detail;
+            else if (errorData.message) errorMessage = errorData.message;
 
             throw new Error(errorMessage);
         }
@@ -68,24 +95,34 @@ export const runAudit = async (config) => {
     } catch (error) {
         clearTimeout(timeoutId);
         if (error.name === 'AbortError') {
-            throw new Error('Audit request timed out (30s limit).');
+            throw new Error('Audit request timed out (60s limit).');
+        }
+        if (error.message === 'Failed to fetch') {
+            throw new Error(`Cannot connect to backend at ${API_BASE_URL}. Is it running?`);
         }
         throw error;
     }
 };
 
-// --- Mock Data Generator ---
-const mockAudit = (config) => {
+// --- Mock Data Generator (Client-Side Fallback) ---
+const mockAudit = (payload) => {
     return new Promise((resolve) => {
         setTimeout(() => {
             resolve({
-                id: Date.now(),
+                id: Date.now().toString(),
+                status: "completed",
                 timestamp: new Date().toISOString(),
-                server: config.server,
+                server: payload.server,
                 summary: {
                     critical: Math.floor(Math.random() * 3),
                     warning: Math.floor(Math.random() * 5),
                     info: Math.floor(Math.random() * 10),
+                },
+                metrics: {
+                    cpu: '15%',
+                    ram: '4.2GB / 16GB',
+                    disk: '45% used',
+                    connections: 23,
                 },
                 services: [
                     { name: 'SSH', status: 'active', version: 'OpenSSH_8.2p1' },
@@ -93,28 +130,21 @@ const mockAudit = (config) => {
                     { name: 'Fail2Ban', status: 'active', version: '0.11.1' },
                     { name: 'UFW', status: 'active', version: '0.36' },
                 ],
+                findings: [
+                    { severity: 'Critical', description: 'Root login enabled via SSH' },
+                    { severity: 'Warning', description: 'UFW is active but allowing port 8080' },
+                    { severity: 'Info', description: 'System uptime: 14 days' }
+                ],
                 logs: [
                     'Dec 05 10:00:01 server systemd[1]: Started Session 1 of user root.',
                     'Dec 05 10:05:23 server sshd[1234]: Failed password for invalid user admin from 192.168.1.50 port 22 ssh2',
                     'Dec 05 10:10:00 server CRON[5678]: (root) CMD (cd / && run-parts --report /etc/cron.hourly)',
-                    ...Array(10).fill(0).map((_, i) => `Dec 05 10:${10 + i}:00 server kernel: [UFW BLOCK] IN=eth0 OUT= MAC=... SRC=192.168.1.${100 + i} DST=...`),
                 ],
                 ips: [
                     { ip: '192.168.1.50', country: 'Unknown', reason: 'Failed SSH login' },
                     { ip: '10.0.0.5', country: 'Local', reason: 'High traffic' },
                 ],
-                metrics: {
-                    cpu: '15%',
-                    ram: '4.2GB / 16GB',
-                    disk: '45% used',
-                    connections: 23,
-                },
-                findings: [
-                    { severity: 'Critical', description: 'Root login enabled via SSH' },
-                    { severity: 'Warning', description: 'UFW is active but allowing port 8080' },
-                    { severity: 'Info', description: 'System uptime: 14 days' }
-                ]
             });
-        }, 2000); // Simulate 2s delay
+        }, 2000);
     });
 };

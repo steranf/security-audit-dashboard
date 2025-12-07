@@ -23,6 +23,20 @@ const ResultViewer = ({ results, mode }) => {
         return `"${stringField.replace(/"/g, '""')}"`;
     };
 
+    if (results.status === 'debug') {
+        return (
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
+                <div className="flex items-center mb-4">
+                    <AlertTriangle className="w-8 h-8 text-yellow-500 mr-3" />
+                    <h2 className="text-2xl font-bold text-gray-800">DIAGNÓSTICO DE VERSIÓN COMPLETADO (DEBUG MODE)</h2>
+                </div>
+                <div className="bg-gray-900 text-gray-100 p-4 rounded-md overflow-x-auto font-mono text-sm whitespace-pre-wrap">
+                    {results.raw_output}
+                </div>
+            </div>
+        );
+    }
+
     const handleExport = (format) => {
         let content = '';
         let type = '';
@@ -212,8 +226,8 @@ const ResultViewer = ({ results, mode }) => {
                                         </td>
                                         <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${service.status === 'active' || service.status === 'running'
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : 'bg-red-100 text-red-800'
+                                                ? 'bg-green-100 text-green-800'
+                                                : 'bg-red-100 text-red-800'
                                                 }`}>
                                                 {service.status}
                                             </span>

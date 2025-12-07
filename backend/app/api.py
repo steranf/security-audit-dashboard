@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 from app.models import AuditRequest, AuditResult, AuditLog
 from app.audit_runner import run_audit_task
@@ -19,6 +20,19 @@ async def start_audit(request: AuditRequest, session: Session = Depends(get_sess
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, run_audit_task, request)
         
+        # Check for PassphraseRequired failure
+        if result.status == "failed":
+            for finding in result.findings:
+                if finding.description == "PassphraseRequired":
+                    return JSONResponse(
+                        status_code=401,
+                        content={
+                            "status": "error",
+                            "code": "PASSPHRASE_REQUIRED",
+                            "message": "Key is encrypted. Please provide passphrase."
+                        }
+                    )
+
         # Save to DB
         db_log = AuditLog(
             id=result.id,
@@ -34,6 +48,19 @@ async def start_audit(request: AuditRequest, session: Session = Depends(get_sess
         return result
         
     except Exception as e:
+        print(f"Error in start_audit: {e}")
+        error_msg = str(e)
+        # Intercept the specific error string from paramiko/audit_runner
+        if "PassphraseRequired" in error_msg:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "status": "error",
+                    "code": "PASSPHRASE_REQUIRED",
+                    "message": "Key is encrypted. Please provide passphrase."
+                }
+            )
+        # Otherwise, genuine server error
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/audit/{audit_id}", response_model=AuditResult)

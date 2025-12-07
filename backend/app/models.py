@@ -17,6 +17,8 @@ class AuditRequest(BaseModel):
     mode: str = "json"
     lines: int = 100
     services: str = ""
+    passphrase: Optional[str] = None
+    password: Optional[str] = None
     options: Optional[AuditOptions] = None
 
     @validator('server')

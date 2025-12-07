@@ -16,9 +16,9 @@ app = FastAPI(
 
 # CORS Configuration
 origins = [
-    "http://localhost:5173", # Vite default
-    "http://localhost:3000",
-    "*" 
+    "http://localhost:5173", # Vite local dev
+    "http://localhost:4173", # Vite preview
+    "http://127.0.0.1:5173",
 ]
 
 app.add_middleware(

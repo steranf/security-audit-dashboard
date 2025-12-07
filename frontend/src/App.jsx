@@ -30,16 +30,43 @@ function App() {
 
         try {
             const data = await runAudit(config);
+
+            // Logic to intercept errors hidden in 200 OK responses
+            if (data.status === 'failed') {
+                // Check if it's a specific PassphraseRequired error
+                const errorMsg = data.findings?.[0]?.description || data.error || "Unknown error";
+
+                if (errorMsg.includes("PassphraseRequired")) {
+                    // Propagate specific error to trigger UI in Audits.jsx
+                    throw new Error("PassphraseRequired");
+                }
+
+                // For other failures, throw to catch block
+                throw new Error(errorMsg);
+            }
+
             setResults(data);
             saveResults(data);
             setNotification({ type: 'success', message: 'Audit completed successfully!' });
         } catch (err) {
             console.error(err);
+
+            // If it's a specific PassphraseRequired error, re-throw it so Audits.jsx can handle it
+            if (err.code === 'PASSPHRASE_REQUIRED') {
+                throw err;
+            }
+
             setError(err?.message || "Unexpected error occurred");
             setNotification({ type: 'error', message: `Audit failed: ${err?.message || "Unknown error"}` });
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleClearAll = () => {
+        setResults(null);
+        setError(null);
+        setNotification(null);
     };
 
     return (
@@ -70,7 +97,11 @@ function App() {
                 </div>
             )}
 
-            <Audits onRunAudit={handleRunAudit} isRunning={loading} />
+            <Audits
+                onRunAudit={handleRunAudit}
+                onClear={handleClearAll}
+                isRunning={loading}
+            />
 
             {error && (
                 <div role="alert" className="bg-red-50 border-l-4 border-red-500 p-4 mb-8">
