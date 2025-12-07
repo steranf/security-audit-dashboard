@@ -38,59 +38,12 @@ const ResultViewer = ({ results, mode }) => {
     }
 
     const handleExport = (format) => {
-        let content = '';
-        let type = '';
-        let extension = '';
+        // Use the same base URL logic as api.js
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+        const exportUrl = `${API_BASE_URL}/audit/${results.id}/export?format=${format}`;
 
-        if (format === 'json') {
-            content = JSON.stringify(results, null, 2);
-            type = 'application/json';
-            extension = 'json';
-        } else if (format === 'csv') {
-            // Secure CSV generation
-            const header = 'Section,Key,Value\n';
-            const summaryRows = Object.entries(results.summary).map(([k, v]) => `Summary,${escapeCsv(k)},${escapeCsv(v)}`).join('\n');
-            const metricRows = Object.entries(results.metrics).map(([k, v]) => `Metrics,${escapeCsv(k)},${escapeCsv(v)}`).join('\n');
-            const findingRows = results.findings ? results.findings.map(f => `Finding,${escapeCsv(f.severity)},${escapeCsv(f.description)}`).join('\n') : '';
-            const serviceRows = results.services ? results.services.map(s => `Service,${escapeCsv(s.name)},${escapeCsv(s.status + ' | ' + s.version)}`).join('\n') : '';
-            const ipRows = results.ips ? results.ips.map(i => `SuspiciousIP,${escapeCsv(i.ip)},${escapeCsv(i.reason + ' | ' + i.country)}`).join('\n') : '';
-
-            content = header + summaryRows + '\n' + metricRows + '\n' + findingRows + '\n' + serviceRows + '\n' + ipRows;
-            type = 'text/csv';
-            extension = 'csv';
-        } else if (format === 'html') {
-            // Secure HTML export with sanitization
-            content = `
-                <html>
-                <head><title>Audit Report - ${escapeHtml(results.server)}</title></head>
-                <body>
-                    <h1>Security Audit Report</h1>
-                    <p>Target: ${escapeHtml(results.server)}</p>
-                    <p>Date: ${escapeHtml(results.timestamp)}</p>
-                    <h2>Summary</h2>
-                    <ul>
-                        <li>Critical: ${escapeHtml(results.summary.critical)}</li>
-                        <li>Warning: ${escapeHtml(results.summary.warning)}</li>
-                        <li>Info: ${escapeHtml(results.summary.info)}</li>
-                    </ul>
-                </body>
-                </html>
-             `;
-            type = 'text/html';
-            extension = 'html';
-        }
-
-        if (content) {
-            const blob = new Blob([content], { type });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `audit-report-${results.id}.${extension}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
+        // Trigger download
+        window.open(exportUrl, '_blank');
     };
 
     if (mode === 'json') {

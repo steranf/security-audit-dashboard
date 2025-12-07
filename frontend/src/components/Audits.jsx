@@ -54,6 +54,11 @@ const Audits = ({ onRunAudit, onClear, isRunning }) => {
       if (error.code === "PASSPHRASE_REQUIRED") {
         setShowPassphrase(true);
         setPassphraseMessage("Key is encrypted. Please enter passphrase below.");
+      } else if (error.code === "SUDO_PASSWORD_REQUIRED") {
+        setShowPasswordAuth(true); // Enable fallback password field
+        // We can reuse the passphrase message area or add a specific one. 
+        // For now, let's use the same message area but clarify it's for sudo
+        setPassphraseMessage("Sudo requires password. Please enter user password below.");
       }
     }
   };
@@ -182,7 +187,7 @@ const Audits = ({ onRunAudit, onClear, isRunning }) => {
             {showPassphrase && (
               <div className="col-span-2 animate-fade-in">
                 <label className="block text-sm font-medium text-red-600 mb-1">
-                  SSH Key Passphrase (Required)
+                  {passphraseMessage.includes("Sudo") ? "Sudo Password (Required)" : "SSH Key Passphrase (Required)"}
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -204,7 +209,9 @@ const Audits = ({ onRunAudit, onClear, isRunning }) => {
             {/* Password Input (Toggleable) */}
             {showPasswordAuth && (
               <div className="col-span-2 animate-fade-in">
-                <label className="block text-sm font-medium text-gray-700 mb-1">SSH Password</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {passphraseMessage.includes("Sudo") ? "Sudo Password (Required)" : "SSH Password"}
+                </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Lock className="h-5 w-5 text-gray-400" aria-hidden="true" />
@@ -268,8 +275,8 @@ const Audits = ({ onRunAudit, onClear, isRunning }) => {
             </button>
           </div>
         </div>
-      </form>
-    </div>
+      </form >
+    </div >
   );
 };
 

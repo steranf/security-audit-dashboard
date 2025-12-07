@@ -4,152 +4,142 @@ import subprocess
 import sys
 import os
 import re
-import time
+
+# 1. PATH INJECTION: Ensure sbin is visible for sudo
+os.environ["PATH"] += os.pathsep + "/usr/local/sbin" + os.pathsep + "/usr/sbin" + os.pathsep + "/sbin" + os.pathsep + "/usr/bin" + os.pathsep + "/bin"
 
 def run_cmd(cmd):
     try:
-        return subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode('utf-8').strip()
+        # 2. FAULT TOLERANCE: Handle exit codes (e.g. dnf=100) gracefully
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        return result.stdout.decode('utf-8').strip()
     except:
         return ""
 
 def get_metrics():
     metrics = {}
-    
-    # CPU
     try:
         load = os.getloadavg()
         metrics['cpu'] = f"{load[0] * 10:.1f}%" 
-    except:
-        metrics['cpu'] = "N/A"
+    except: metrics['cpu'] = "N/A"
 
-    # RAM
     try:
-        with open('/proc/meminfo') as f:
-            meminfo = f.read()
+        with open('/proc/meminfo') as f: meminfo = f.read()
         total = int(re.search(r'MemTotal:\s+(\d+)', meminfo).group(1))
         available = int(re.search(r'MemAvailable:\s+(\d+)', meminfo).group(1))
         used_gb = (total - available) / 1024 / 1024
         total_gb = total / 1024 / 1024
         metrics['ram'] = f"{used_gb:.1f}GB / {total_gb:.1f}GB"
-    except:
-        metrics['ram'] = "N/A"
+    except: metrics['ram'] = "N/A"
 
-    # Disk
     try:
         df = run_cmd("df -h / | tail -1 | awk '{print $5}'")
         metrics['disk'] = df if df else "N/A"
-    except:
-        metrics['disk'] = "N/A"
+    except: metrics['disk'] = "N/A"
 
-    # Connections
     try:
         conns = run_cmd("ss -tun | wc -l")
         metrics['connections'] = int(conns) if conns else 0
-    except:
-        metrics['connections'] = 0
-
+    except: metrics['connections'] = 0
     return metrics
 
 def get_services():
     services = []
-    # Common services + CyberPanel specific (lscpd, pure-ftpd, dovecot, postfix)
-    target_services = [
-        'ssh', 'sshd', 
-        'nginx', 'httpd', 'apache2', 'lscpd',
-        'mysql', 'mariadb', 
-        'postfix', 'dovecot', 'pure-ftpd',
-        'docker', 'ufw', 'firewalld', 'fail2ban'
+    targets = [
+        'sshd', 'mariadb', 'mysql', 'postfix', 'dovecot', 'pure-ftpd', 
+        'firewalld', 'fail2ban', 'redis', 'clamav-freshclam', 'spamassassin',
+        'monarx-agent', 'httpd', 'apache2', 'nginx', 'lscpd', 'lshttpd', 'opendkim'
     ]
     
-    for svc in target_services:
-        status = run_cmd(f"systemctl is-active {svc}")
-        if status == 'active':
-            version = "Unknown"
-            # Try to get version
-            if svc in ['ssh', 'sshd']:
-                v = run_cmd("ssh -V 2>&1")
-                version = v.split()[0] if v else "Unknown"
-            elif svc == 'nginx':
-                v = run_cmd("nginx -v 2>&1")
-                version = v.split('/')[-1] if v else "Unknown"
-            elif svc == 'lscpd':
-                v = run_cmd("/usr/local/lsws/bin/lshttpd -v")
-                version = v.split('\n')[0] if v else "Unknown"
-            elif svc == 'docker':
-                v = run_cmd("docker --version")
-                version = v.split('version ')[1].split(',')[0] if v else "Unknown"
+    cmd_matrix = {
+        'mariadb': ['mysqld --version', 'mysql --version'],
+        'postfix': ['postconf -d mail_version'],
+        'dovecot': ['dovecot --version'],
+        'pure-ftpd': ['pure-ftpd --help'], 
+        'firewalld': ['firewall-cmd --version'],
+        'fail2ban': ['fail2ban-client --version'],
+        'redis': ['redis-server --version'],
+        'spamassassin': ['spamassassin --version'],
+        'clamav-freshclam': ['freshclam --version'],
+        'monarx-agent': ['rpm -q monarx-agent', 'dpkg -s monarx-agent'],
+        'sshd': ['ssh -V'],
+        'nginx': ['nginx -v'],
+        'httpd': ['httpd -v', 'apache2 -v'],
+        'lscpd': ['/usr/local/lsws/bin/lshttpd -v', 'lshttpd -v'], 
+        'lshttpd': ['/usr/local/lsws/bin/lshttpd -v', 'lshttpd -v'],
+        'opendkim': ['opendkim -V']
+    }
+
+    def extract_version(text):
+        if not text: return "Unknown"
+        match = re.search(r'(?:Ver:|Ver\s+|Version\s+|v\.|v\s*=?\s*|version\s+)?\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-\w+)?)', text, re.IGNORECASE)
+        return match.group(1) if match else text.split('\n')[0][:50].strip()
+
+    for srv in targets:
+        try:
+            status = run_cmd(f"systemctl is-active {srv}")
+            if status != "active" and srv == 'mysql': status = run_cmd("systemctl is-active mariadb")
             
-            services.append({"name": svc, "status": "active", "version": version})
+            if status == "active":
+                raw_version = ""
+                commands = cmd_matrix.get(srv, [f"{srv} --version"])
+                for cmd in commands:
+                    out = run_cmd(f"{cmd} 2>&1")
+                    if out and "command not found" not in out and len(out) > 2:
+                        raw_version = out
+                        break
+                services.append({"name": srv, "status": "active", "version": extract_version(raw_version)})
+        except: pass
     return services
 
 def get_findings():
     findings = []
-    
-    # Check Root Login
     try:
-        sshd_config = run_cmd("grep '^PermitRootLogin' /etc/ssh/sshd_config")
-        if "yes" in sshd_config:
+        if "yes" in run_cmd("grep '^PermitRootLogin' /etc/ssh/sshd_config"):
             findings.append({"severity": "Critical", "description": "Root login permitted via SSH"})
-    except:
-        pass
+    except: pass
 
-    # Check Firewall
     ufw = run_cmd("ufw status | grep 'Status: active'")
     firewalld = run_cmd("systemctl is-active firewalld")
     iptables = run_cmd("iptables -L | grep 'Chain INPUT'")
-    
     if not (ufw or firewalld == 'active' or iptables):
         findings.append({"severity": "High", "description": "No active firewall detected"})
         
-    # Check Updates (yum/dnf for AlmaLinux/CentOS, apt for Debian/Ubuntu)
     if os.path.exists("/usr/bin/dnf"):
-        updates = run_cmd("dnf check-update --security | grep -c 'Security'")
-        if updates and int(updates) > 0:
-             findings.append({"severity": "Medium", "description": f"{updates} security updates available"})
+        try:
+            out = run_cmd("dnf check-update --security")
+            count = sum(1 for line in out.split('\n') if any(arch in line for arch in ['x86_64', 'noarch', 'aarch64']))
+            if count > 0:
+                findings.append({"severity": "High", "description": f"{count} critical security updates available"})
+        except: pass
     elif os.path.exists("/usr/bin/apt"):
-        updates = run_cmd("apt list --upgradable 2>/dev/null | grep -c 'security'")
-        if updates and int(updates) > 0:
-             findings.append({"severity": "Medium", "description": f"{updates} security updates available"})
-
+        try:
+            updates = run_cmd("apt list --upgradable 2>/dev/null | grep -c '-security'")
+            if updates and int(updates) > 0:
+                 findings.append({"severity": "High", "description": f"{updates} security updates available"})
+        except: pass
     return findings
 
 def get_logs():
-    # Get last 5 logs from relevant files
     logs = []
-    # Prioritize mail logs for CyberPanel context, then auth
-    log_files = ['/var/log/maillog', '/var/log/mail.log', '/var/log/secure', '/var/log/auth.log']
-    
-    count = 0
-    for log_file in log_files:
+    for log_file in ['/var/log/maillog', '/var/log/mail.log', '/var/log/secure', '/var/log/auth.log']:
         if os.path.exists(log_file):
             try:
-                # Get last few lines
                 lines = run_cmd(f"tail -n 5 {log_file}").split('\n')
-                for l in lines:
-                    if l and count < 10:
-                        logs.append(f"{log_file}: {l}")
-                        count += 1
-            except:
-                pass
-        if count >= 10: break
-        
-    return logs
+                logs.extend([f"{log_file}: {l}" for l in lines if l][:5])
+            except: pass
+        if len(logs) >= 10: break
+    return logs[:10]
 
 def get_ips():
-    # Simple netstat parsing for high connection counts
     ips = []
     try:
-        # Get top 3 IPs by connection count
-        cmd = "ss -tun | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr | head -3"
-        output = run_cmd(cmd)
+        output = run_cmd("ss -tun | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr | head -3")
         for line in output.split('\n'):
             parts = line.strip().split()
-            if len(parts) == 2:
-                count, ip = parts
-                if ip and ip != "Address" and ip != "servers)":
-                    ips.append({"ip": ip, "country": "Unknown", "reason": f"{count} connections"})
-    except:
-        pass
+            if len(parts) == 2 and parts[1] not in ["Address", "servers)"]:
+                ips.append({"ip": parts[1], "country": "Unknown", "reason": f"{parts[0]} connections"})
+    except: pass
     return ips
 
 def main():
@@ -161,13 +151,10 @@ def main():
         "logs": get_logs(),
         "ips": get_ips()
     }
-    
-    # Calc summary
     for f in result['findings']:
         if f['severity'] == 'Critical': result['summary']['critical'] += 1
         elif f['severity'] == 'High': result['summary']['warning'] += 1
         else: result['summary']['info'] += 1
-
     print(json.dumps(result))
 
 if __name__ == "__main__":
