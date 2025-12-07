@@ -8,16 +8,20 @@ A professional, lightweight dashboard to audit Linux servers via SSH without ins
 
 ## ✨ Key Features
 
-*   **🕵️ Agentless Auditing**: Connects via SSH (Paramiko), runs a temporary Python script, and disconnects. Zero footprint left on the target server.
+*   **🕵️ Deep Security Inspection (Sherlock Mode)**: 
+    *   **Fail2Ban Intelligence**: Audits usage of jails vs real services (e.g., warns if MySQL is exposed but unprotected).
+    *   **Protocol Hardening**: Detects obsolete SSHv1, verifies **FTP TLS Enforcement** (Process & Config check), and warns on insecure defaults.
+    *   **Kernel Defense**: Checks for **Mandatory Access Control** (SELinux/AppArmor) status.
+    *   **Core Checks**: Root Login, Empty Passwords, UID 0, Dangerous Ports (3306, 5432, 23).
 *   **🧠 Smart Authentication**: 
     *   Supports SSH Keys (Encrypted & Plain), Password Auth, and Custom Ports.
-    *   **Intelligent Fallback**: Can detect locked keys and skip them if a password is provided.
     *   **Sudo Handling**: Prompts for sudo password *only* when the server requires it.
-*   **📊 Rich Reporting**:
-    *   **Interactive UI**: Built with React + TailwindCSS + Lucide Icons.
-    *   **Export Options**: Download professional **HTML Reports**, CSV summaries, or Raw JSON data.
+*   **📊 Insights & Reporting**:
+    *   **Actionable Recommendations**: Every finding comes with a specific "How to fix" command or config change.
+    *   **Severity Sorting**: Auto-prioritizes findings (Critical > High > Warning > Info).
+    *   **Export Options**: Download professionally styled **HTML Reports** or JSON data.
 *   **🚀 Modern Stack**:
-    *   **Backend**: FastAPI (Python), Async SSH, SQLite.
+    *   **Backend**: FastAPI (Python), Async SSH.
     *   **Frontend**: Vite (React), TailwindCSS.
 
 ---

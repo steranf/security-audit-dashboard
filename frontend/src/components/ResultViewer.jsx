@@ -98,6 +98,55 @@ const ResultViewer = ({ results, mode }) => {
                         <CheckCircle className="w-8 h-8 text-blue-400" />
                     </div>
                 </div>
+
+            </div>
+
+            {/* Security Findings Detail Table */}
+            <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <AlertTriangle className="w-5 h-5 mr-2 text-brand-blue" /> Security Findings Detail
+                </h3>
+                {results.findings && results.findings.length > 0 ? (
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto border rounded-md">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                                <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Severity</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Description</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Recomendation</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {results.findings.sort((a, b) => {
+                                    const priority = { 'Critical': 0, 'High': 1, 'Warning': 2, 'Info': 3 };
+                                    return (priority[a.severity] || 99) - (priority[b.severity] || 99);
+                                }).map((f, idx) => (
+                                    <tr key={idx}>
+                                        <td className="px-3 py-2 whitespace-nowrap">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${f.severity === 'Critical' ? 'bg-red-100 text-red-800' :
+                                                f.severity === 'High' || f.severity === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
+                                                    'bg-blue-100 text-blue-800'
+                                                }`}>
+                                                {f.severity}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-sm text-gray-700">
+                                            {f.description}
+                                        </td>
+                                        <td className="px-3 py-2 text-sm text-gray-500 italic">
+                                            {f.recommendation || (f.severity === 'Critical' ? 'Immediate action required' : 'Review and mitigate')}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div className="text-center p-4 text-gray-500 bg-gray-50 rounded">
+                        <CheckCircle className="w-8 h-8 mx-auto text-green-400 mb-2" />
+                        <p>No issues found. Great job!</p>
+                    </div>
+                )}
             </div>
 
             {/* Metrics & Services Grid */}

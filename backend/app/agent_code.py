@@ -94,30 +94,293 @@ def get_services():
 
 def get_findings():
     findings = []
+    
+    # --- 1. CORE AUTHENTICATION ---
+    
+    # Check 1: SSH Root Login
     try:
         if "yes" in run_cmd("grep '^PermitRootLogin' /etc/ssh/sshd_config"):
-            findings.append({"severity": "Critical", "description": "Root login permitted via SSH"})
+            findings.append({
+                "severity": "Critical", 
+                "description": "Root login permitted via SSH",
+                "recommendation": "Edit /etc/ssh/sshd_config and set PermitRootLogin no"
+            })
+        else:
+            findings.append({
+                "severity": "Info", 
+                "description": "SSH Root Login is disabled (Good)",
+                "recommendation": "Mantain this configuration"
+            })
     except: pass
 
+    # Check 2: Empty Passwords
+    try:
+        empty_pw = run_cmd("awk -F: '($2 == \"\" ) {print $1}' /etc/shadow 2>/dev/null") 
+        if empty_pw:
+             findings.append({
+                "severity": "Critical", 
+                "description": f"Users with empty passwords found: {empty_pw}",
+                "recommendation": "Set passwords for these users or lock their accounts (passwd -l)"
+            })
+        else:
+             findings.append({
+                "severity": "Info", 
+                "description": "No users with empty passwords found",
+                "recommendation": "Enforce strong password policies"
+            })
+    except: pass
+
+    # Check 3: UID 0 Backdoors
+    try:
+        users_uid0 = run_cmd("awk -F: '($3 == 0) {print $1}' /etc/passwd").replace('\n', ' ').strip()
+        if users_uid0 != 'root':
+             findings.append({
+                "severity": "Critical", 
+                "description": f"Non-root users with UID 0 found: {users_uid0}",
+                "recommendation": "Investigate these users immediately. Only root should have UID 0."
+            })
+        else:
+             findings.append({
+                "severity": "Info", 
+                "description": "No backdoors found (Only root has UID 0)",
+                "recommendation": "Monitor /etc/passwd changes"
+            })
+    except: pass
+
+    # --- 2. NETWORK DEFENSE & PROTOCOLS ---
+
+    # Check 4: Firewall Status
     ufw = run_cmd("ufw status | grep 'Status: active'")
     firewalld = run_cmd("systemctl is-active firewalld")
     iptables = run_cmd("iptables -L | grep 'Chain INPUT'")
     if not (ufw or firewalld == 'active' or iptables):
-        findings.append({"severity": "High", "description": "No active firewall detected"})
+        findings.append({
+            "severity": "High", 
+            "description": "No active firewall detected",
+            "recommendation": "Enable ufw, firewalld or configure iptables rules immediately"
+        })
+    else:
+        findings.append({
+            "severity": "Info", 
+            "description": "Firewall is active (Good)",
+            "recommendation": "Regularly review firewall rules"
+        })
+
+
+    # Check 5: Fail2Ban Deep Audit
+    try:
+        f2b_status = run_cmd("systemctl is-active fail2ban")
+        if f2b_status == "active":
+            # Get active jails
+            jail_list = run_cmd("fail2ban-client status | grep 'Jail list'").replace('Jail list:', '').strip().replace(',', '')
+            # Clean split to avoid empty strings and tree artifacts like '`-', '|-'
+            active_jails = [j.strip() for j in jail_list.split() if j.strip() and not j.strip() in ['-', '`-','|-']]
+            
+            # Detect running services
+            services_running = run_cmd("ss -tuln")
+            
+            missing_jails = []
+            if "22" in services_running and not any(j in ['sshd', 'ssh'] for j in active_jails): missing_jails.append("SSH")
+            if "21" in services_running and not any(j in ['pure-ftpd', 'vsftpd', 'proftpd', 'ftp'] for j in active_jails): missing_jails.append("FTP")
+            # Expanded mail jail detection
+            if "587" in services_running and not any(j in ['postfix', 'exim', 'sendmail', 'mail', 'postfix-sasl', 'submission'] for j in active_jails): missing_jails.append("Mail")
+            if "143" in services_running and not any(j in ['dovecot'] for j in active_jails): missing_jails.append("Dovecot")
+            # Database Check
+            if "3306" in services_running and not any(j in ['mysqld-auth', 'mysql', 'mariadb'] for j in active_jails): missing_jails.append("MySQL")
+
+            if missing_jails:
+                findings.append({
+                    "severity": "Warning", 
+                    "description": f"Fail2Ban active. Jails: [{', '.join(active_jails)}]. Missing coverage for: {', '.join(missing_jails)}",
+                    "recommendation": "Enable/Configure jails in /etc/fail2ban/jail.local for these services"
+                })
+            else:
+                findings.append({
+                    "severity": "Info", 
+                    "description": f"Fail2Ban active protecting: {', '.join(active_jails) or 'configured services'}",
+                    "recommendation": "Monitor fail2ban logs"
+                })
+
+            # Web Jails Recommendation (Non-Critical)
+            if ("80" in services_running or "443" in services_running) and not any(j in ['apache-auth', 'nginx-http-auth', 'nginx-botsearch', 'apache-badbots'] for j in active_jails):
+                 findings.append({
+                    "severity": "Info", 
+                    "description": "Web Services active. No specific web jails (botsearch/http-auth) detected.",
+                    "recommendation": "Consider enabling web-specific jails if hosting dynamic sites or logins."
+                })
+        else:
+             findings.append({
+                "severity": "High", 
+                "description": "Fail2Ban intrusion detection is NOT active",
+                "recommendation": "Install and start fail2ban to prevent brute-force attacks"
+            })
+    except: pass
+
+    # Check 6: Protocol Security (SSH, FTP)
+    try:
+        # SSH Protocol Check
+        ssh_proto = run_cmd("grep '^Protocol' /etc/ssh/sshd_config | grep '1'")
+        if ssh_proto:
+            findings.append({"severity": "Critical", "description": "Obsolete SSH Protocol 1 enabled", "recommendation": "Force Protocol 2 in sshd_config"})
+        else:
+            findings.append({"severity": "Info", "description": "SSH is using secure Protocol 2", "recommendation": "Mantain standard"});
+
+        # FTP Process Check (Smart TLS Detection)
+        if "21" in run_cmd("ss -tuln"):
+             # 1. Check process arguments for forced TLS
+             ftp_process = run_cmd("ps -eo args | grep pure-ftpd")
+             # 2. Check config file for TLS directive
+             ftp_config = run_cmd("grep '^TLS' /etc/pure-ftpd/pure-ftpd.conf 2>/dev/null")
+             
+             if "-Y 2" in ftp_process or "-Y 3" in ftp_process or "--tls=2" in ftp_process or "--tls=3" in ftp_process:
+                 findings.append({
+                    "severity": "Info", 
+                    "description": "FTP Service detected with TLS Enforced via process (Good)",
+                    "recommendation": "Mantain this secure configuration"
+                })
+             elif ftp_config:
+                 if " 1" in ftp_config:
+                      findings.append({
+                        "severity": "Warning", 
+                        "description": "FTP allows Mixed Mode (TLS 1). Cleartext connections are still permitted.",
+                        "recommendation": "Edit /etc/pure-ftpd/pure-ftpd.conf and change to 'TLS 2' to enforce encryption."
+                    })
+                 elif " 2" in ftp_config or " 3" in ftp_config:
+                      findings.append({
+                        "severity": "Info", 
+                        "description": f"FTP Service detected with TLS Enforced in config ({ftp_config.strip()})",
+                        "recommendation": "Mantain this secure configuration"
+                    })
+                 else:
+                     findings.append({
+                        "severity": "Warning", 
+                        "description": f"FTP config found but TLS setting is unclear: {ftp_config.strip()}",
+                        "recommendation": "Verify pure-ftpd.conf has 'TLS 2'"
+                    })
+             else:
+                 findings.append({
+                    "severity": "Warning", 
+                    "description": "FTP service detected (Port 21) without clear TLS enforcement.",
+                    "recommendation": "Ensure TLS is enforced (e.g., pure-ftpd -Y 2) or check /etc/pure-ftpd.conf"
+                })
+    except: pass
+
+    # Check 7: Dangerous Ports
+    try:
+        ports = run_cmd("ss -tuln")
+        dangerous = {'3306': 'MySQL', '5432': 'PostgreSQL', '6379': 'Redis', '27017': 'MongoDB', '23': 'Telnet'}
+        exposed_count = 0
+        for port, service in dangerous.items():
+            if f"0.0.0.0:{port}" in ports or f"*:{port}" in ports:
+                exposed_count += 1
+                findings.append({
+                    "severity": "High", 
+                    "description": f"{service} port {port} is exposed to the entire internet",
+                    "recommendation": f"Bind {service} to 127.0.0.1 or block port {port} in firewall"
+                })
+        if exposed_count == 0:
+            findings.append({
+                "severity": "Info", 
+                "description": "No dangerous database/telnet ports exposed",
+                "recommendation": "Mantain firewall rules"
+            })
+    except: pass
+
+    # --- 3. SYSTEM HEALTH & SECURITY LAYERS ---
+
+    # Check 8: Mandatory Access Control (SELinux/AppArmor)
+    try:
+        selinux_status = "Disabled"
+        if os.path.exists("/usr/sbin/sestatus"):
+            selinux_output = run_cmd("sestatus | grep 'Current mode'")
+            if "enforcing" in selinux_output.lower(): selinux_status = "Enforcing"
+            elif "permissive" in selinux_output.lower(): selinux_status = "Permissive"
         
+        apparmor_status = "Inactive"
+        if os.path.exists("/usr/sbin/aa-status"):
+             if "apparmor module is loaded" in run_cmd("aa-status --enabled 2>&1 || echo 'loaded'"):
+                 apparmor_status = "Active"
+
+        if selinux_status == "Enforcing" or apparmor_status == "Active":
+            layer = "SELinux" if selinux_status == "Enforcing" else "AppArmor"
+            findings.append({
+                "severity": "Info", 
+                "description": f"Mandatory Access Control is active ({layer})",
+                "recommendation": "Mantain checking audit logs"
+            })
+        elif selinux_status == "Permissive":
+             findings.append({
+                "severity": "Warning", 
+                "description": "SELinux is in Permissive mode (Logging only, not blocking)",
+                "recommendation": "Set to Enforcing mode for full protection"
+            })
+        else:
+            findings.append({
+                "severity": "Warning", 
+                "description": "No Mandatory Access Control (SELinux/AppArmor) detected/enforced",
+                "recommendation": "Enable SELinux or AppArmor for kernel-level defense"
+            })
+    except: pass
+
+    # Check 9: System Updates
     if os.path.exists("/usr/bin/dnf"):
         try:
             out = run_cmd("dnf check-update --security")
             count = sum(1 for line in out.split('\n') if any(arch in line for arch in ['x86_64', 'noarch', 'aarch64']))
             if count > 0:
-                findings.append({"severity": "High", "description": f"{count} critical security updates available"})
+                findings.append({
+                    "severity": "High", 
+                    "description": f"{count} critical security updates available",
+                    "recommendation": "Run 'dnf update --security' to patch vulnerabilities"
+                })
+            else:
+                findings.append({
+                    "severity": "Info", 
+                    "description": "System packages are up to date",
+                    "recommendation": "Continue regular patching schedule"
+                })
         except: pass
     elif os.path.exists("/usr/bin/apt"):
         try:
             updates = run_cmd("apt list --upgradable 2>/dev/null | grep -c '-security'")
             if updates and int(updates) > 0:
-                 findings.append({"severity": "High", "description": f"{updates} security updates available"})
+                 findings.append({
+                     "severity": "High", 
+                     "description": f"{updates} security updates available",
+                     "recommendation": "Run 'apt list --upgradable' and 'apt upgrade' to patch"
+                 })
+            else:
+                 findings.append({
+                     "severity": "Info", 
+                     "description": "System packages are up to date",
+                     "recommendation": "Continue regular patching schedule"
+                 })
         except: pass
+
+    # Check 10: Resources (CPU/RAM/Disk)
+    try:
+        disk_use = run_cmd("df / | tail -1 | awk '{print $5}' | tr -d '%'")
+        if disk_use and int(disk_use) > 90:
+             findings.append({"severity": "Warning", "description": f"Root partition usage is critical: {disk_use}%", "recommendation": "Clean up files"})
+        else:
+             findings.append({"severity": "Info", "description": f"Disk usage is healthy ({disk_use}%)", "recommendation": "Monitor storage"})
+
+        load = os.getloadavg()[0]
+        if load > 4.0:
+             findings.append({"severity": "Warning", "description": f"High CPU Load: {load:.2f}", "recommendation": "Check top processes"})
+        else:
+             findings.append({"severity": "Info", "description": f"CPU Load is normal ({load:.2f})", "recommendation": "Monitor for spikes"})
+
+        with open('/proc/meminfo') as f: meminfo = f.read()
+        total = int(re.search(r'MemTotal:\s+(\d+)', meminfo).group(1))
+        available = int(re.search(r'MemAvailable:\s+(\d+)', meminfo).group(1))
+        used_percent = ((total - available) / total) * 100
+        if used_percent > 90:
+             findings.append({"severity": "Warning", "description": f"High RAM usage: {used_percent:.1f}%", "recommendation": "Check memory consumers"})
+        else:
+             findings.append({"severity": "Info", "description": f"RAM usage is healthy ({used_percent:.1f}%)", "recommendation": "Monitor memory"})
+    except: pass
+    
     return findings
 
 def get_logs():
@@ -153,7 +416,7 @@ def main():
     }
     for f in result['findings']:
         if f['severity'] == 'Critical': result['summary']['critical'] += 1
-        elif f['severity'] == 'High': result['summary']['warning'] += 1
+        elif f['severity'] == 'High' or f['severity'] == 'Warning': result['summary']['warning'] += 1
         else: result['summary']['info'] += 1
     print(json.dumps(result))
 

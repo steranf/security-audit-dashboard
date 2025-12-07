@@ -67,6 +67,7 @@ class ServiceInfo(BaseModel):
 class Finding(BaseModel):
     severity: str
     description: str
+    recommendation: Optional[str] = None
 
 class SuspiciousIP(BaseModel):
     ip: str
