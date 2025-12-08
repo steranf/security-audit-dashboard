@@ -68,11 +68,21 @@ class Finding(BaseModel):
     severity: str
     description: str
     recommendation: Optional[str] = None
+    standard_ref: Optional[str] = None
 
 class SuspiciousIP(BaseModel):
     ip: str
     country: str
     reason: str
+
+class OpenPort(BaseModel):
+    proto: str
+    port: str
+    ip: str
+    family: Optional[str] = "IPv4"
+    service: str
+    status: str
+    risk: str
 
 class AuditResult(BaseModel):
     id: str
@@ -85,4 +95,5 @@ class AuditResult(BaseModel):
     findings: List[Finding]
     logs: List[str]
     ips: List[SuspiciousIP]
+    open_ports: Optional[List[OpenPort]] = []
     raw_output: Optional[str] = None # For debugging or text mode

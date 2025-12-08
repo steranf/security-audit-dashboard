@@ -46,8 +46,6 @@ const ResultViewer = ({ results, mode }) => {
         window.open(exportUrl, '_blank');
     };
 
-
-
     return (
         <div className="space-y-6">
             {/* Header & Actions */}
@@ -70,7 +68,122 @@ const ResultViewer = ({ results, mode }) => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Security Score Card */}
+                <div className={`border-l-4 p-4 rounded shadow-sm flex flex-col justify-between ${(() => {
+                    const score = Math.max(0, 100 - (
+                        (results.summary.critical || 0) * 15 +
+                        (results.findings.filter(f => f.severity === 'High').length) * 10 +
+                        (results.summary.warning || 0) * 3
+                    ));
+                    if (score >= 90) return 'bg-green-50 border-green-500';
+                    if (score >= 70) return 'bg-yellow-50 border-yellow-500';
+                    if (score >= 50) return 'bg-orange-50 border-orange-500';
+                    return 'bg-red-50 border-red-500';
+                })()
+                    }`}>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="font-medium text-gray-600">Security Score</p>
+                            <div className="flex items-baseline">
+                                <span className={`text-3xl font-bold ${(() => {
+                                    const score = Math.max(0, 100 - (
+                                        (results.summary.critical || 0) * 15 +
+                                        (results.findings.filter(f => f.severity === 'High').length) * 10 +
+                                        (results.summary.warning || 0) * 3
+                                    ));
+                                    if (score >= 90) return 'text-green-700';
+                                    if (score >= 70) return 'text-yellow-800';
+                                    if (score >= 50) return 'text-orange-800';
+                                    return 'text-red-800';
+                                })()
+                                    }`}>
+                                    {Math.max(0, 100 - (
+                                        (results.summary.critical || 0) * 15 +
+                                        (results.findings.filter(f => f.severity === 'High').length) * 10 +
+                                        (results.summary.warning || 0) * 3
+                                    ))}
+                                </span>
+                                <span className="text-sm text-gray-500 ml-1">/ 100</span>
+                            </div>
+                        </div>
+                        <Activity className={`w-8 h-8 ${(() => {
+                            const score = Math.max(0, 100 - (
+                                (results.summary.critical || 0) * 15 +
+                                (results.findings.filter(f => f.severity === 'High').length) * 10 +
+                                (results.summary.warning || 0) * 3
+                            ));
+                            if (score >= 90) return 'text-green-400';
+                            if (score >= 70) return 'text-yellow-400';
+                            if (score >= 50) return 'text-orange-400';
+                            return 'text-red-400';
+                        })()
+                            }`} />
+                    </div>
+                    <div className="mt-2 text-xs font-semibold text-gray-500">
+                        {(() => {
+                            const score = Math.max(0, 100 - (
+                                (results.summary.critical || 0) * 15 +
+                                (results.findings.filter(f => f.severity === 'High').length) * 10 +
+                                (results.summary.warning || 0) * 3
+                            ));
+                            if (score >= 90) return 'EXCELLENT';
+                            if (score >= 70) return 'GOOD / REVIEW';
+                            if (score >= 50) return 'AT RISK';
+                            return 'CRITICAL STATE';
+                        })()}
+                    </div>
+                </div>
+
+                {/* Risk Distribution Chart */}
+                <div className="bg-white border p-4 rounded shadow-sm flex flex-col justify-between">
+                    <p className="font-medium text-gray-600 mb-2">Risk Distribution</p>
+                    <div className="flex items-center justify-center">
+                        {(() => {
+                            const critical = results.summary.critical || 0;
+                            const high = results.findings.filter(f => f.severity === 'High').length;
+                            const warning = results.summary.warning || 0;
+                            const info = results.summary.info || 0;
+                            const total = critical + high + warning + info;
+
+                            if (total === 0) return <div className="text-gray-400 text-sm">No Data</div>;
+
+                            // Calculate segments (circumference = 100)
+                            const cPer = (critical / total) * 100;
+                            const hPer = (high / total) * 100;
+                            const wPer = (warning / total) * 100;
+                            const iPer = (info / total) * 100;
+
+                            return (
+                                <div className="relative w-24 h-24">
+                                    <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
+                                        {/* Background Circle */}
+                                        <path className="text-gray-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+
+                                        {/* Segments */}
+                                        {critical > 0 && (
+                                            <path className="text-red-500" strokeDasharray={`${cPer}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                        )}
+                                        {high > 0 && (
+                                            <path className="text-orange-500" strokeDasharray={`${hPer}, 100`} strokeDashoffset={`-${cPer}`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                        )}
+                                        {warning > 0 && (
+                                            <path className="text-yellow-400" strokeDasharray={`${wPer}, 100`} strokeDashoffset={`-${cPer + hPer}`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                        )}
+                                        {info > 0 && (
+                                            <path className="text-blue-400" strokeDasharray={`${iPer}, 100`} strokeDashoffset={`-${cPer + hPer + wPer}`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                        )}
+                                    </svg>
+                                    <div className="absolute inset-0 flex items-center justify-center flex-col">
+                                        <span className="text-xs font-bold text-gray-700">{total}</span>
+                                        <span className="text-[8px] text-gray-500">ISSUES</span>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </div>
+
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
@@ -98,7 +211,6 @@ const ResultViewer = ({ results, mode }) => {
                         <CheckCircle className="w-8 h-8 text-blue-400" />
                     </div>
                 </div>
-
             </div>
 
             {/* Security Findings Detail Table */}
@@ -112,23 +224,41 @@ const ResultViewer = ({ results, mode }) => {
                             <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                                 <tr>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Severity</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Standard</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Description</th>
                                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">Recomendation</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {results.findings.sort((a, b) => {
-                                    const priority = { 'Critical': 0, 'High': 1, 'Warning': 2, 'Info': 3 };
-                                    return (priority[a.severity] || 99) - (priority[b.severity] || 99);
+                                {[...results.findings].sort((a, b) => {
+                                    const getScore = (s) => {
+                                        if (!s) return 99;
+                                        const sev = s.toString().trim().toLowerCase();
+                                        if (sev === 'critical') return 0;
+                                        if (sev === 'high') return 0;
+                                        if (sev === 'warning') return 2;
+                                        if (sev === 'info') return 3;
+                                        return 99;
+                                    };
+                                    return getScore(a.severity) - getScore(b.severity);
                                 }).map((f, idx) => (
                                     <tr key={idx}>
                                         <td className="px-3 py-2 whitespace-nowrap">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${f.severity === 'Critical' ? 'bg-red-100 text-red-800' :
-                                                f.severity === 'High' || f.severity === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${f.severity === 'Critical' || f.severity === 'High' ? 'bg-red-100 text-red-800' :
+                                                f.severity === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
                                                     'bg-blue-100 text-blue-800'
                                                 }`}>
                                                 {f.severity}
                                             </span>
+                                        </td>
+                                        <td className="px-3 py-2 whitespace-nowrap">
+                                            {f.standard_ref ? (
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-gray-100 text-gray-600 border border-gray-200">
+                                                    {f.standard_ref}
+                                                </span>
+                                            ) : (
+                                                <span className="text-gray-300">-</span>
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-sm text-gray-700">
                                             {f.description}
@@ -145,6 +275,73 @@ const ResultViewer = ({ results, mode }) => {
                     <div className="text-center p-4 text-gray-500 bg-gray-50 rounded">
                         <CheckCircle className="w-8 h-8 mx-auto text-green-400 mb-2" />
                         <p>No issues found. Great job!</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Network Attack Surface Table */}
+            <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <Globe className="w-5 h-5 mr-2 text-purple-600" /> Network Attack Surface (Open Ports)
+                </h3>
+                {results.open_ports && results.open_ports.length > 0 ? (
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto border rounded-md">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                                <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Port</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Protocol</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Binding (IP)</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status / Risk</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {[...results.open_ports].sort((a, b) => {
+                                    const serviceDiff = a.service.localeCompare(b.service);
+                                    if (serviceDiff !== 0) return serviceDiff;
+                                    return parseInt(a.port || 0) - parseInt(b.port || 0);
+                                }).map((p, idx) => (
+                                    <tr key={idx} className="hover:bg-gray-50">
+                                        <td className="px-3 py-2 text-sm font-medium text-gray-900">
+                                            {p.service}
+                                        </td>
+                                        <td className="px-3 py-2 text-sm text-gray-500 font-mono">
+                                            {p.port}
+                                        </td>
+                                        <td className="px-3 py-2 text-sm text-gray-500">
+                                            <span className="uppercase text-xs font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                                                {p.proto}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-sm text-gray-700 font-mono">
+                                            {p.ip}
+                                            {p.family && (
+                                                <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded border ${p.family === 'IPv6' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                                                    {p.family}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-3 py-2 whitespace-nowrap">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${p.risk === 'High' ? 'bg-red-100 text-red-800' :
+                                                p.risk === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                                    p.status === 'Public' ? 'bg-green-100 text-green-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                {p.status === 'Public' && p.risk === 'High' ? '⛔ Exposed (High Risk)' :
+                                                    p.status === 'Public' ? '✅ Public (Standard)' :
+                                                        '🛡️ Localhost Only'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div className="text-center p-4 text-gray-500 bg-gray-50 rounded">
+                        <Activity className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                        <p>No listening ports detected (or scan failed).</p>
                     </div>
                 )}
             </div>
@@ -268,7 +465,7 @@ const ResultViewer = ({ results, mode }) => {
                     </ul>
                 </div>
             </div>
-        </div >
+        </div>
     );
 };
 

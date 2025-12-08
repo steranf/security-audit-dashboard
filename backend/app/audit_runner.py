@@ -6,7 +6,7 @@ import os
 import uuid
 import base64
 from datetime import datetime
-from app.models import AuditRequest, AuditResult, AuditSummary, AuditMetrics, ServiceInfo, Finding, SuspiciousIP
+from app.models import AuditRequest, AuditResult, AuditSummary, AuditMetrics, ServiceInfo, Finding, SuspiciousIP, OpenPort
 from app.agent_code import AGENT_SCRIPT_CONTENT
 # IMPORT THE GENERATOR
 from app.utils import generate_html_report, log_audit_event
@@ -20,7 +20,10 @@ def mock_audit(request: AuditRequest, audit_id:str, timestamp:str) -> AuditResul
             summary=AuditSummary(critical=1, warning=2, info=3),
             metrics=AuditMetrics(cpu="10%", ram="1GB/4GB", disk="20%", connections=5),
             services=[ServiceInfo(name="sshd", status="active", version="8.2"), ServiceInfo(name="nginx", status="active", version="1.18")],
-            findings=[Finding(severity="Critical", description="Mock critical finding"), Finding(severity="Warning", description="Mock warning")],
+            findings=[
+                Finding(severity="Critical", description="Mock critical finding", recommendation="Fix immediately", standard_ref="MOCK-CIS-1.1"), 
+                Finding(severity="Warning", description="Mock warning", recommendation="Review config", standard_ref="MOCK-OWASP-A1")
+            ],
             logs=["mock log 1", "mock log 2"],
             ips=[SuspiciousIP(ip="1.2.3.4", country="Mockland", reason="mock reason")]
         )
@@ -63,7 +66,7 @@ def _run_ssh_audit(audit_id: str, timestamp: str, request: AuditRequest) -> Audi
         base_cmd = f"python3 {remote_file}"
         cmd = f"echo '{request.password}' | sudo -S -p '' {base_cmd}" if request.password else f"sudo {base_cmd}"
         
-        stdin, stdout, stderr = client.exec_command(cmd, timeout=60)
+        stdin, stdout, stderr = client.exec_command(cmd, timeout=120)
         exit_code = stdout.channel.recv_exit_status()
         output = stdout.read().decode('utf-8')
         
@@ -81,7 +84,8 @@ def _run_ssh_audit(audit_id: str, timestamp: str, request: AuditRequest) -> Audi
             services=[ServiceInfo(**s) for s in data.get("services", [])],
             findings=[Finding(**f) for f in data.get("findings", [])],
             logs=data.get("logs", []),
-            ips=[SuspiciousIP(**i) for i in data.get("ips", [])]
+            ips=[SuspiciousIP(**i) for i in data.get("ips", [])],
+            open_ports=[OpenPort(**p) for p in data.get("open_ports", [])]
         )
 
         # GENERATE HTML REPORT

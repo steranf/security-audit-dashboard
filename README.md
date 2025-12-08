@@ -21,6 +21,13 @@ A professional, lightweight dashboard to audit Linux servers via SSH without ins
     *   **Cron Hunter**: Scans for suspicious tasks running from `/tmp` or `/dev/shm` (Malware indicators).
     *   **Anti-Spam**: Checks if Postfix is configured as an **Open Relay** (`inet_interfaces=all` with open networks).
     *   **Web Hygiene**: Audits Security Headers (`X-Frame-Options`, `X-Content-Type`) and Server banner leakage.
+*   **🌐 Network Attack Surface (Open Ports)**:
+    *   **Agentless Scanner**: Parses `ss` (preferred) or `netstat` output to identify all listening ports.
+    *   **Dual-Stack Awareness**: Correctly reports and merges IPv4/IPv6 exposures.
+    *   **Risk Intelligence**: Automatically classifies ports:
+        *   ✅ **Public (Standard)**: HTTP/S, SMTP/IMAP, secure SSH (Info).
+        *   ⚠️ **Custom/Unknown**: Non-standard high ports (Info/Warning).
+        *   🚨 **Critical Exposure**: Sensitive services like MySQL, Redis, or Telnet exposed to the public internet (0.0.0.0).
 *   **🧠 Smart Authentication**: 
     *   Supports SSH Keys (Encrypted & Plain), Password Auth, and Custom Ports.
     *   **Sudo Handling**: Prompts for sudo password *only* when the server requires it.
